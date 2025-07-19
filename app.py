@@ -1,38 +1,42 @@
 
-from flask import Flask, request, jsonify
 import os
+from flask import Flask, request, jsonify
 import alpaca_trade_api as tradeapi
 
 app = Flask(__name__)
 
-# Alpaca API keys (from environment variables)
-API_KEY = os.getenv("API_KEY")
-API_SECRET = os.getenv("API_SECRET")
-BASE_URL = "https://paper-api.alpaca.markets"
+# Alpaca API credentials from environment
+APCA_API_KEY_ID = os.getenv("APCA_API_KEY_ID")
+APCA_API_SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
+APCA_API_BASE_URL = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
 
-# Initialize Alpaca API
-api = tradeapi.REST(API_KEY, API_SECRET, BASE_URL, api_version='v2')
+# Customizable order size (defaults to 1 if not set)
+ORDER_SIZE = int(os.getenv("ORDER_SIZE", 1))
+
+# Connect to Alpaca
+api = tradeapi.REST(APCA_API_KEY_ID, APCA_API_SECRET_KEY, APCA_API_BASE_URL, api_version='v2')
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    data = request.json
-    action = data.get('action')
-    symbol = data.get('symbol', 'AAPL')
+    data = request.get_json()
+
+    if not data or 'action' not in data or 'symbol' not in data:
+        return jsonify({"error": "Invalid request format"}), 400
+
+    symbol = data['symbol']
+    action = data['action'].lower()
 
     try:
         if action == 'buy':
-            api.submit_order(symbol=symbol, qty=1, side='buy', type='market', time_in_force='gtc')
-            return jsonify({'message': f'Buy order sent for {symbol}'})
+            api.submit_order(symbol=symbol, qty=ORDER_SIZE, side='buy', type='market', time_in_force='gtc')
         elif action == 'sell':
-            api.submit_order(symbol=symbol, qty=1, side='sell', type='market', time_in_force='gtc')
-            return jsonify({'message': f'Sell order sent for {symbol}'})
-        elif action == 'close':
-            api.close_position(symbol)
-            return jsonify({'message': f'Position closed for {symbol}'})
+            api.submit_order(symbol=symbol, qty=ORDER_SIZE, side='sell', type='market', time_in_force='gtc')
         else:
-            return jsonify({'error': 'Invalid action'}), 400
+            return jsonify({"error": "Invalid action"}), 400
+
+        return jsonify({"status": "Order submitted", "symbol": symbol, "action": action, "qty": ORDER_SIZE}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
